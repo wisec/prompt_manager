@@ -1,6 +1,6 @@
 # Prompt Manager
 
-A simple, yet powerful, desktop application built with PyQt6 for Linux to manage and quickly access frequently used text prompts. This application allows users to create, modify, and delete prompt templates, associating each with a button for one-click copying to the clipboard. It also features system tray integration for easy access and background operation.
+A simple desktop application built with PyQt6 for Linux to manage and quickly access frequently used text prompts. This application allows users to create, modify, and delete prompt templates, associating each with a button for one-click copying to the clipboard. It also features system tray integration for easy access and background operation.
 
 ## Table of Contents
 
