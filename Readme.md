@@ -1,6 +1,6 @@
 # Prompt Manager
 
-A simple, yet powerful, desktop application built with PyQt6 for Linux to manage and quickly access frequently used text prompts. This application allows users to create, modify, and delete prompt templates, associating each with a button for one-click copying to the clipboard. It also features system tray integration for easy access and background operation.
+A simple desktop application built with PyQt6 for Linux to manage and quickly access frequently used text prompts. This application allows users to create, modify, and delete prompt templates, associating each with a button for one-click copying to the clipboard. It also features system tray integration for easy access and background operation.
 
 ## Table of Contents
 
@@ -52,6 +52,7 @@ A simple, yet powerful, desktop application built with PyQt6 for Linux to manage
     pip install PyQt6
     ```
     *   `PyQt6`: The GUI toolkit.
+    
     or debian/ubuntu
     ```bash 
     sudo apt install python3-pyqt6
@@ -104,9 +105,9 @@ A simple, yet powerful, desktop application built with PyQt6 for Linux to manage
 ```
 
 ## Disclaimer 
-This project was entirely created using Gemini with some AI promptings.
+This project was entirely created using Gemini with some AI prompts.
 Thanks to the simplicity of the project, it was not necessary to modify the 
-code created by Gemini, but only to adjust it with additional prompts.
+code created by Gemini, but only adjusting it with additional prompts.
 
 ## Contributing
 
