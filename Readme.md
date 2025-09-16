@@ -105,9 +105,9 @@ A simple desktop application built with PyQt6 for Linux to manage and quickly ac
 ```
 
 ## Disclaimer 
-This project was entirely created using Gemini with some AI promptings.
+This project was entirely created using Gemini with some AI prompts.
 Thanks to the simplicity of the project, it was not necessary to modify the 
-code created by Gemini, but only to adjust it with additional prompts.
+code created by Gemini, but only adjusting it with additional prompts.
 
 ## Contributing
 
