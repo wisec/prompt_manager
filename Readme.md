@@ -88,15 +88,15 @@ A simple, yet powerful, desktop application built with PyQt6 for Linux to manage
 
 ## Configuration
 
-*   **`prompts.json`**: This file is automatically created in the same directory as `app_prompts.py`. It stores all your prompt data in JSON format.
+*   **`prompts.json`**: This file is automatically created in the same directory as `prompt_manager.py`. It stores all your prompt data in JSON format.
 *   **`prompts.json.old.bak`**: A backup copy of `prompts.json` created automatically before each save operation.
-*   **`app_icon.png` (or `.ico`)**: For a custom application and tray icon, place an image file named `app_icon.png` (or `app_icon.ico`) in the same directory as `app_prompts.py`. If not found, a default system icon will be used.
+*   **`app_icon_32.png` **: For a custom application and tray icon, place an image file named `app_icon_32.png` in the same directory as `prompt_manager.py`. If not found, a default system icon will be used.
 
 ## Project Structure
 
 ```
 .
-├── app_prompts.py # The main application script
+├── prompt_manager.py # The main application script
 ├── prompts.json # Local database for saved prompts (auto-generated)
 ├── prompts.json.old.bak # Backup of the prompts database (auto-generated)
 └── app_icon.png # (Optional) Custom application icon file
