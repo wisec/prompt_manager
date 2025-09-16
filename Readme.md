@@ -5,7 +5,6 @@ A simple, yet powerful, desktop application built with PyQt6 for Linux to manage
 ## Table of Contents
 
 - [Features](#features)
-- [Screenshots](#screenshots)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Configuration](#configuration)
