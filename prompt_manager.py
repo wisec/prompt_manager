@@ -1,6 +1,10 @@
+#!/bin/env python3
 import sys
 import json
 import os
+import shutil # Make sure shutil is imported for copyfile
+import pathlib # New import for managing file paths
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
     QTextEdit, QLineEdit, QPushButton, QLabel,QLayout,
@@ -17,7 +21,11 @@ from PyQt6.QtCore import (
 # Import for functools.partial for dynamic menu actions
 from functools import partial
 
-PROMPT_DB_FILE = 'prompts.json'
+# --- Configuration for Prompt Database ---
+# Define the hidden directory in the user's home for application data
+APP_DATA_DIR = pathlib.Path.home() / ".prompt_manager"
+# Define the full path for the prompt database file
+PROMPT_DB_FILE = APP_DATA_DIR / "prompts.json"
 
 # --- FlowLayout Class Definition ---
 # This class enables dynamic button wrapping based on available width
@@ -102,6 +110,8 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
         super().__init__()
         self.setWindowTitle("PyQt Prompt Manager")
         self.setGeometry(100, 100, 800, 600)
+        # Ensure the application data directory exists
+        APP_DATA_DIR.mkdir(parents=True, exist_ok=True) # Create the directory if it doesn't exist
 
         self.prompts = self.load_prompts()
         self.init_ui()
@@ -246,9 +256,9 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
 
         # Note: self.setLayout(main_layout) is no longer needed when using QMainWindow with central_widget
 
-
     def load_prompts(self):
-        if os.path.exists(PROMPT_DB_FILE):
+        # Now PROMPT_DB_FILE is a Path object, use .exists() method
+        if PROMPT_DB_FILE.exists():
             try:
                 with open(PROMPT_DB_FILE, 'r', encoding='utf-8') as f:
                     return json.load(f)
@@ -260,21 +270,49 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
     def save_prompts(self):
         try:
             # Create a backup of the existing prompts.json before overwriting
-            backup_file = PROMPT_DB_FILE + ".old.bak"
-            if os.path.exists(PROMPT_DB_FILE):
+            backup_file = PROMPT_DB_FILE.with_suffix(".json.old.bak") # Correctly forms .prompt_manager/prompts.json.old.bak
+            if PROMPT_DB_FILE.exists():
                 try:
-                    import shutil
                     shutil.copyfile(PROMPT_DB_FILE, backup_file)
-                    self.statusBar().showMessage(f"Backup created: '{backup_file}'.", 2000)
+                    self.statusBar().showMessage(f"Backup created: '{backup_file.name}'.", 2000)
                 except Exception as e:
-                    # Log or show a warning if backup fails, but don't stop the main save operation
-                    QMessageBox.warning(self, "Backup Error", f"Failed to create backup file '{backup_file}': {e}. Proceeding with save.")
+                    QMessageBox.warning(self, "Backup Error", f"Failed to create backup file '{backup_file.name}': {e}. Proceeding with save.")
                     self.statusBar().showMessage(f"Warning: Backup failed ({e}).", 3000)
 
+            # Now save the current prompts to the main file
             with open(PROMPT_DB_FILE, 'w', encoding='utf-8') as f:
                 json.dump(self.prompts, f, indent=4, ensure_ascii=False)
         except IOError as e:
             QMessageBox.critical(self, "Save Error", f"Unable to save the prompt file: {e}")
+
+    # def load_prompts(self):
+    #     if os.path.exists(PROMPT_DB_FILE):
+    #         try:
+    #             with open(PROMPT_DB_FILE, 'r', encoding='utf-8') as f:
+    #                 return json.load(f)
+    #         except json.JSONDecodeError:
+    #             QMessageBox.warning(self, "DB Error", "The prompt file is corrupted. Creating a new database.")
+    #             return []
+    #     return []
+
+    # def save_prompts(self):
+    #     try:
+    #         # Create a backup of the existing prompts.json before overwriting
+    #         backup_file = PROMPT_DB_FILE + ".old.bak"
+    #         if os.path.exists(PROMPT_DB_FILE):
+    #             try:
+    #                 import shutil
+    #                 shutil.copyfile(PROMPT_DB_FILE, backup_file)
+    #                 self.statusBar().showMessage(f"Backup created: '{backup_file}'.", 2000)
+    #             except Exception as e:
+    #                 # Log or show a warning if backup fails, but don't stop the main save operation
+    #                 QMessageBox.warning(self, "Backup Error", f"Failed to create backup file '{backup_file}': {e}. Proceeding with save.")
+    #                 self.statusBar().showMessage(f"Warning: Backup failed ({e}).", 3000)
+
+    #         with open(PROMPT_DB_FILE, 'w', encoding='utf-8') as f:
+    #             json.dump(self.prompts, f, indent=4, ensure_ascii=False)
+    #     except IOError as e:
+    #         QMessageBox.critical(self, "Save Error", f"Unable to save the prompt file: {e}")
 
     def populate_prompt_buttons_old(self):
         # Clear existing buttons to avoid duplicates

@@ -18,7 +18,7 @@ A simple, yet powerful, desktop application built with PyQt6 for Linux to manage
 *   **Prompt Management:** Create, edit, and delete text prompts directly within the application.
 *   **Dynamic Buttons:** Each saved prompt is represented by a dynamically created button.
 *   **Clipboard Integration:** Click a prompt button to instantly copy its content to the clipboard.
-*   **Persistent Storage:** Prompts are saved locally in a `prompts.json` file.
+*   **Persistent Storage:** Prompts are saved locally in a `prompts.json` file within a dedicated hidden directory in the user's home folder.
 *   **Backup Mechanism:** Automatic backup (`prompts.json.old.bak`) is created before each save to prevent data loss.
 *   **System Tray Integration:**
     *   Minimize the application to the system tray instead of closing it.
@@ -88,9 +88,11 @@ A simple, yet powerful, desktop application built with PyQt6 for Linux to manage
 
 ## Configuration
 
-*   **`prompts.json`**: This file is automatically created in the same directory as `prompt_manager.py`. It stores all your prompt data in JSON format.
-*   **`prompts.json.old.bak`**: A backup copy of `prompts.json` created automatically before each save operation.
-*   **`app_icon_32.png` **: For a custom application and tray icon, place an image file named `app_icon_32.png` in the same directory as `prompt_manager.py`. If not found, a default system icon will be used.
+*   **Prompt Data Location:** All prompt data is stored in a hidden directory within your user's home folder:
+    *   `~/.prompt_manager/` (e.g., `/home/your_username/.prompt_manager/` on Linux)
+*   **`prompts.json`**: This file is automatically created inside the `.prompt_manager/` directory. It stores all your prompt data in JSON format.
+*   **`prompts.json.old.bak`**: A backup copy of `prompts.json` created automatically inside the `.prompt_manager/` directory before each save operation.
+*   **`app_icon.png` (or `.ico`)**: For a custom application and tray icon, place an image file named `app_icon.png` (or `app_icon.ico`) in the same directory as ``prompt_manager.py`. If not found, a default system icon will be used.
 
 ## Project Structure
 
