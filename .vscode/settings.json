@@ -1,0 +1,8 @@
+{
+    "sarif-viewer.connectToGithubCodeScanning": "off",
+    "spellright.language": [],
+    "spellright.documentTypes": [
+        "latex",
+        "plaintext"
+    ]
+}
