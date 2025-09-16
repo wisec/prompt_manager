@@ -52,6 +52,7 @@ A simple, yet powerful, desktop application built with PyQt6 for Linux to manage
     pip install PyQt6
     ```
     *   `PyQt6`: The GUI toolkit.
+    
     or debian/ubuntu
     ```bash 
     sudo apt install python3-pyqt6
