@@ -155,7 +155,9 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
         self.tray_icon.setContextMenu(self.tray_menu)
         self.tray_icon.activated.connect(self.on_tray_icon_activated)
         self.tray_icon.show()
-
+        # Connect the tray_menu's aboutToShow signal to update the prompt list
+        # This ensures the prompt list is refreshed every time the tray menu is opened.
+        self.tray_menu.aboutToShow.connect(self.update_tray_menu)
         # Update tray menu immediately after initial load
         self.update_tray_menu()
 
@@ -181,6 +183,7 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
             self.statusBar().showMessage("Application restored from tray.")
 
     def update_tray_menu(self):
+        self.prompts = self.load_prompts() #
         # Clear existing prompt actions from the sub-menu before repopulating
         self.prompts_sub_menu.clear()
 
@@ -240,6 +243,12 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
 
         # --- Saved Prompts Buttons Panel ---
         saved_prompts_panel_layout = QVBoxLayout()
+        saved_prompts_panel_layout.addWidget(QLabel("Search Prompts:")) # New label for search
+        self.search_input = QLineEdit() # NEW: Search input box
+        self.search_input.setPlaceholderText("Type to search prompts...")
+        self.search_input.textChanged.connect(self.filter_prompt_buttons) # Connect signal
+        saved_prompts_panel_layout.addWidget(self.search_input) # Add search input
+
         saved_prompts_panel_layout.addWidget(QLabel("Saved Prompts:"))
 
         self.scroll_area = QScrollArea()
@@ -336,8 +345,26 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
                 col = 0
                 row += 1
         self.statusBar().showMessage(f"{len(self.prompts)} prompts loaded.")
+    
+    def filter_prompt_buttons(self, search_text):
+        search_text = search_text.strip().lower() # Get search text, clean it, and make lowercase
+
+        if not search_text:
+            self.populate_prompt_buttons(self.prompts) # If search is empty, show all
+            return
+
+        filtered_list = []
+        for prompt_data in self.prompts:
+            # Filter by title (case-insensitive)
+            if search_text in prompt_data['title'].lower():
+                filtered_list.append(prompt_data)
+            elif search_text in prompt_data['content'].lower():
+                filtered_list.append(prompt_data)
         
-    def populate_prompt_buttons(self):
+        self.populate_prompt_buttons(filtered_list) # Update buttons with filtered list
+        # Status bar message handled by populate_prompt_buttons now        
+
+    def populate_prompt_buttons(self, prompts_to_display=None):
         # Clear existing buttons to avoid duplicates
         # FlowLayout requires taking items one by one
         while self.prompt_buttons_layout.count():
@@ -345,16 +372,23 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
             widget = item.widget()
             if widget:
                 widget.deleteLater()
+        if prompts_to_display is None:
+            prompts_to_display = self.prompts # If no specific list provided, display all
 
         # Recreate all buttons
         # FlowLayout will handle dynamic wrapping
-        for prompt_data in self.prompts:
+        for prompt_data in prompts_to_display:
             button = QPushButton(prompt_data['title'])
             # Pass a copy of prompt_data to avoid closure issues with the loop
             button.clicked.connect(lambda checked, p=prompt_data: self.on_prompt_button_clicked(p))
             self.prompt_buttons_layout.addWidget(button) # Changed from addWidget(button, row, col)
 
-        self.statusBar().showMessage(f"{len(self.prompts)} prompts loaded.")
+         # Update status bar based on what was populated
+        if prompts_to_display == self.prompts: # If all prompts are displayed (no active filter)
+             self.statusBar().showMessage(f"{len(self.prompts)} prompts loaded.")
+        else: # If a filter was applied
+             self.statusBar().showMessage(f"{len(prompts_to_display)} prompts found.")
+
 
     def save_prompt(self):
         title = self.title_input.text().strip()
@@ -383,7 +417,9 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
             message = f"Prompt '{title}' saved successfully!"
 
         self.save_prompts()
-        self.populate_prompt_buttons() # Update buttons
+        self.prompts = self.load_prompts() # Reload all prompts after saving
+        self.filter_prompt_buttons(self.search_input.text()) # Re-apply current filter
+        #self.populate_prompt_buttons() # Update buttons
         self.statusBar().showMessage(message) # Use the status bar
         self.clear_input_fields()
         self.delete_button.setEnabled(False) # Disable delete button
@@ -404,7 +440,9 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
             self.prompts = [p for p in self.prompts if p['title'] != title_to_delete]
             if len(self.prompts) < initial_len:
                 self.save_prompts()
-                self.populate_prompt_buttons()
+                self.prompts = self.load_prompts() # Reload all prompts after deletion
+                self.filter_prompt_buttons(self.search_input.text()) # Re-apply current filter
+                #self.populate_prompt_buttons()
                 self.clear_input_fields()
                 self.delete_button.setEnabled(False)
                 self.statusBar().showMessage(f"Prompt '{title_to_delete}' deleted successfully!") # Use the status bar
