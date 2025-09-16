@@ -127,7 +127,7 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
         # Fallback to a standard icon if custom icon is not found.
         SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
         icon_path = os.path.join(SCRIPT_DIR, "app_icon_32.png")
-        print(icon_path)
+        
         if os.path.exists(icon_path):
             self.tray_icon.setIcon(QIcon(icon_path))
         else:
