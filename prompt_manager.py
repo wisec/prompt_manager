@@ -2,33 +2,40 @@
 import sys
 import json
 import os
-import shutil # Make sure shutil is imported for copyfile
-import pathlib # New import for managing file paths
+import shutil
+import pathlib
+from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
-    QTextEdit, QLineEdit, QPushButton, QLabel,QLayout,
-    QScrollArea, QGridLayout, QMessageBox, QWidget,
-    QStatusBar,
-    QSystemTrayIcon, QMenu
+    QTextEdit, QLineEdit, QPushButton, QLabel, QLayout,
+    QScrollArea, QMessageBox, QWidget,
+    QStatusBar, QTableView, QHeaderView, # Added QTableView, QHeaderView
+    QSystemTrayIcon, QMenu,
+    QSplitter # ADDED: QSplitter
 )
 from PyQt6.QtGui import QClipboard, QIcon ,QAction
 from PyQt6.QtCore import (
-    Qt, QRect, QPoint, QSize 
+    Qt, QRect, QPoint, QSize,
+    QAbstractTableModel, QSortFilterProxyModel # Added QAbstractTableModel, QSortFilterProxyModel
 )
- 
-
-# Import for functools.partial for dynamic menu actions
 from functools import partial
 
 # --- Configuration for Prompt Database ---
+# Determine the directory of the currently running script
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+
 # Define the hidden directory in the user's home for application data
 APP_DATA_DIR = pathlib.Path.home() / ".prompt_manager"
 # Define the full path for the prompt database file
 PROMPT_DB_FILE = APP_DATA_DIR / "prompts.json"
 
+APP_ICON_FILE_NAME = "app_icon_32.png" # Name of the icon file
+# The full path to the icon file, expected alongside the script
+APP_ICON_PATH = SCRIPT_DIR / APP_ICON_FILE_NAME # Now explicitly points to script directory
+
 # --- FlowLayout Class Definition ---
-# This class enables dynamic button wrapping based on available width
+# (No longer used for prompt display, but kept in case it's used elsewhere or for future plans)
 class FlowLayout(QLayout):
     def __init__(self, parent=None, margin=-1, spacing=-1):
         super().__init__(parent)
@@ -104,7 +111,52 @@ class FlowLayout(QLayout):
         return y + lineHeight - rect.y()
 # --- End FlowLayout Class Definition ---
 
+# --- Custom Table Model for Prompts ---
+class PromptTableModel(QAbstractTableModel):
+    def __init__(self, data=None):
+        super().__init__()
+        self._data = data or []
+        self.headers = ["Title", "Created", "Modified"]
+        # Store original data for sorting (if needed, QSortFilterProxyModel can do this too)
 
+    def rowCount(self, parent=None):
+        return len(self._data)
+
+    def columnCount(self, parent=None):
+        return len(self.headers)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if not index.isValid():
+            return None
+        if role == Qt.ItemDataRole.DisplayRole:
+            prompt = self._data[index.row()]
+            column = index.column()
+            if column == 0: return prompt['title']
+            if column == 1: return prompt['created_at'] # Display as string
+            if column == 2: return prompt['modified_at'] # Display as string
+            return None
+        if role == Qt.ItemDataRole.UserRole: # For retrieving full prompt data
+            return self._data[index.row()]
+        return None
+
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
+            return self.headers[section]
+        return None
+    
+    # Method to update data
+    def update_data(self, new_data):
+        self.beginResetModel()
+        self._data = new_data
+        self.endResetModel()
+
+    # Method to get original index from proxy (needed for deletion logic)
+    def get_prompt_by_row(self, row):
+        if 0 <= row < len(self._data):
+            return self._data[row]
+        return None
+
+# --- Main Application Class ---
 class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
     def __init__(self):
         super().__init__()
@@ -115,7 +167,7 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
 
         self.prompts = self.load_prompts()
         self.init_ui()
-        self.populate_prompt_buttons()
+        self.populate_prompt_list() # Initial population of the table view
 
         # Initialize the status bar
         self.setStatusBar(QStatusBar(self))
@@ -123,16 +175,18 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
         # --- System Tray Setup ---
         self.tray_icon = QSystemTrayIcon(self)
         # It's recommended to provide a custom icon for your application.
-        # Ensure 'app_icon.png' is in the same directory as your script, or provide its full path.
+        # Ensure 'app_icon_32.png' is in the same directory as your script, or provide its full path.
         # Fallback to a standard icon if custom icon is not found.
-        SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
-        icon_path = os.path.join(SCRIPT_DIR, "app_icon_32.png")
+        # icon_path = os.path.join(SCRIPT_DIR, "app_icon_32.png") # SCRIPT_DIR is already defined
         
-        if os.path.exists(icon_path):
-            self.tray_icon.setIcon(QIcon(icon_path))
+        if APP_ICON_PATH.exists(): # Use the pathlib Path object
+            self.tray_icon.setIcon(QIcon(str(APP_ICON_PATH)))
+            self.setWindowIcon(QIcon(str(APP_ICON_PATH))) # Set window icon as well
         else:
             # Fallback to a standard system icon
-            self.tray_icon.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_ComputerIcon))
+            default_icon = self.style().standardIcon(self.style().StandardPixmap.SP_ComputerIcon)
+            self.tray_icon.setIcon(default_icon)
+            self.setWindowIcon(default_icon) # Set window icon as well
             self.statusBar().showMessage("Warning: 'app_icon_32.png' not found. Using a default icon.", 5000)
 
         self.tray_menu = QMenu()
@@ -211,12 +265,15 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
     def init_ui(self):
         # QMainWindow requires a central widget
         central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        # self.setCentralWidget(central_widget) # Not needed here, as splitter will be central widget
 
-        main_layout = QHBoxLayout(central_widget) # Pass central_widget to the layout
+        # REPLACED main_layout (QHBoxLayout) with QSplitter
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal) # ADDED: QSplitter
+        self.setCentralWidget(self.main_splitter) # Set splitter as the central widget
 
         # --- Prompt Creation/Editing Panel ---
-        edit_panel_layout = QVBoxLayout()
+        edit_panel_widget = QWidget() # Wrapper widget for the layout
+        edit_panel_layout = QVBoxLayout(edit_panel_widget) # Pass edit_panel_widget to the layout
         edit_panel_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         edit_panel_layout.addWidget(QLabel("Prompt Title:"))
@@ -238,41 +295,64 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
         self.delete_button.setEnabled(False) # Disabled on startup
         action_buttons_layout.addWidget(self.delete_button)
         edit_panel_layout.addLayout(action_buttons_layout)
+        
+        # Add the edit panel to the splitter
+        self.main_splitter.addWidget(edit_panel_widget) # ADDED to splitter
 
-        main_layout.addLayout(edit_panel_layout, 2) # Takes 2/3 of the space
-
-        # --- Saved Prompts Buttons Panel ---
-        saved_prompts_panel_layout = QVBoxLayout()
+        # --- Saved Prompts List Panel ---
+        saved_prompts_panel_widget = QWidget() # Wrapper widget for the layout
+        saved_prompts_panel_layout = QVBoxLayout(saved_prompts_panel_widget) # Pass saved_prompts_panel_widget to the layout
         saved_prompts_panel_layout.addWidget(QLabel("Search Prompts:")) # New label for search
         self.search_input = QLineEdit() # NEW: Search input box
         self.search_input.setPlaceholderText("Type to search prompts...")
-        self.search_input.textChanged.connect(self.filter_prompt_buttons) # Connect signal
+        self.search_input.textChanged.connect(self.filter_prompt_list) # Connect signal
         saved_prompts_panel_layout.addWidget(self.search_input) # Add search input
 
         saved_prompts_panel_layout.addWidget(QLabel("Saved Prompts:"))
 
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # This is the main addition
+        # REPLACED QScrollArea and FlowLayout with QTableView
+        self.prompt_table_view = QTableView() # NEW: QTableView
+        
+        self.prompt_table_view.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
+        self.prompt_table_view.setSelectionMode(QTableView.SelectionMode.SingleSelection)
 
-        self.scroll_area_content = QWidget()
-        self.prompt_buttons_layout = FlowLayout() # Changed from QGridLayout to FlowLayout 
-        #self.prompt_buttons_layout = QGridLayout() # Grid for buttons
-        #self.prompt_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft) # Ensure top-left alignment
-        self.scroll_area_content.setLayout(self.prompt_buttons_layout)
-        self.scroll_area.setWidget(self.scroll_area_content)
+        self.source_model = PromptTableModel(self.prompts) # Our custom model
+        self.proxy_model = QSortFilterProxyModel(self) # For sorting and filtering
+        self.proxy_model.setSourceModel(self.source_model)
+        
+        self.prompt_table_view.setModel(self.proxy_model)
+        
+        # Configure the header for sorting
+        self.prompt_table_view.setSortingEnabled(True) # Enable sorting by clicking headers
+        self.prompt_table_view.horizontalHeader().setSortIndicatorShown(True) # Show the sort indicator
+        # Ensure only Title column is stretched, others adjust to content
+        self.prompt_table_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch) # Title column
+        self.prompt_table_view.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents) # Created
+        self.prompt_table_view.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents) # Modified
+        
+        # Connect selection change for editing/deletion
+        self.prompt_table_view.selectionModel().selectionChanged.connect(self.on_prompt_table_selection_changed)
 
-        saved_prompts_panel_layout.addWidget(self.scroll_area)
-        main_layout.addLayout(saved_prompts_panel_layout, 1) # Takes 1/3 of the space
+        saved_prompts_panel_layout.addWidget(self.prompt_table_view)
+        
+        # Add the saved prompts panel to the splitter
+        self.main_splitter.addWidget(saved_prompts_panel_widget) # ADDED to splitter
 
-        # Note: self.setLayout(main_layout) is no longer needed when using QMainWindow with central_widget
+        # Set initial sizes for the splitter (e.g., 2/3 for edit, 1/3 for list)
+        self.main_splitter.setSizes([self.width() * 2 // 3, self.width() * 1 // 3]) # ADDED: Initial sizes
 
     def load_prompts(self):
-        # Now PROMPT_DB_FILE is a Path object, use .exists() method
         if PROMPT_DB_FILE.exists():
             try:
                 with open(PROMPT_DB_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    # Ensure 'created_at' and 'modified_at' exist for older prompts
+                    for prompt in data:
+                        if 'created_at' not in prompt:
+                            prompt['created_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        if 'modified_at' not in prompt:
+                            prompt['modified_at'] = prompt['created_at'] # Initially same as created_at
+                    return data
             except json.JSONDecodeError:
                 QMessageBox.warning(self, "DB Error", "The prompt file is corrupted. Creating a new database.")
                 return []
@@ -296,103 +376,31 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
         except IOError as e:
             QMessageBox.critical(self, "Save Error", f"Unable to save the prompt file: {e}")
 
-    # def load_prompts(self):
-    #     if os.path.exists(PROMPT_DB_FILE):
-    #         try:
-    #             with open(PROMPT_DB_FILE, 'r', encoding='utf-8') as f:
-    #                 return json.load(f)
-    #         except json.JSONDecodeError:
-    #             QMessageBox.warning(self, "DB Error", "The prompt file is corrupted. Creating a new database.")
-    #             return []
-    #     return []
-
-    # def save_prompts(self):
-    #     try:
-    #         # Create a backup of the existing prompts.json before overwriting
-    #         backup_file = PROMPT_DB_FILE + ".old.bak"
-    #         if os.path.exists(PROMPT_DB_FILE):
-    #             try:
-    #                 import shutil
-    #                 shutil.copyfile(PROMPT_DB_FILE, backup_file)
-    #                 self.statusBar().showMessage(f"Backup created: '{backup_file}'.", 2000)
-    #             except Exception as e:
-    #                 # Log or show a warning if backup fails, but don't stop the main save operation
-    #                 QMessageBox.warning(self, "Backup Error", f"Failed to create backup file '{backup_file}': {e}. Proceeding with save.")
-    #                 self.statusBar().showMessage(f"Warning: Backup failed ({e}).", 3000)
-
-    #         with open(PROMPT_DB_FILE, 'w', encoding='utf-8') as f:
-    #             json.dump(self.prompts, f, indent=4, ensure_ascii=False)
-    #     except IOError as e:
-    #         QMessageBox.critical(self, "Save Error", f"Unable to save the prompt file: {e}")
-
-    def populate_prompt_buttons_old(self):
-        # Clear existing buttons to avoid duplicates
-        while self.prompt_buttons_layout.count():
-            item = self.prompt_buttons_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
-
-        # Recreate all buttons
-        row, col = 0, 0
-        for prompt_data in self.prompts:
-            button = QPushButton(prompt_data['title'])
-            # Pass a copy of prompt_data to avoid closure issues with the loop
-            button.clicked.connect(lambda checked, p=prompt_data: self.on_prompt_button_clicked(p))
-            self.prompt_buttons_layout.addWidget(button, row, col)
-            col += 1
-            if col > 2: # 3 columns per row
-                col = 0
-                row += 1
-        self.statusBar().showMessage(f"{len(self.prompts)} prompts loaded.")
-    
-    def filter_prompt_buttons(self, search_text):
+    def filter_prompt_list(self, search_text): # RENAMED from filter_prompt_buttons
         search_text = search_text.strip().lower() # Get search text, clean it, and make lowercase
 
         if not search_text:
-            self.populate_prompt_buttons(self.prompts) # If search is empty, show all
-            return
+            self.proxy_model.setFilterRegularExpression("") # Clear filter on proxy model
+            self.source_model.update_data(self.prompts) # Ensure source model has all data
+            self.statusBar().showMessage(f"{len(self.prompts)} prompts loaded.")
+        else:
+            filtered_data = [
+                p for p in self.prompts
+                if search_text in p['title'].lower() or search_text in p['content'].lower()
+            ]
+            self.source_model.update_data(filtered_data) # Update source model with filtered data
+            self.statusBar().showMessage(f"{len(filtered_data)} prompts found.")
 
-        filtered_list = []
-        for prompt_data in self.prompts:
-            # Filter by title (case-insensitive)
-            if search_text in prompt_data['title'].lower():
-                filtered_list.append(prompt_data)
-            elif search_text in prompt_data['content'].lower():
-                filtered_list.append(prompt_data)
-        
-        self.populate_prompt_buttons(filtered_list) # Update buttons with filtered list
-        # Status bar message handled by populate_prompt_buttons now        
-
-    def populate_prompt_buttons(self, prompts_to_display=None):
-        # Clear existing buttons to avoid duplicates
-        # FlowLayout requires taking items one by one
-        while self.prompt_buttons_layout.count():
-            item = self.prompt_buttons_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
-        if prompts_to_display is None:
-            prompts_to_display = self.prompts # If no specific list provided, display all
-
-        # Recreate all buttons
-        # FlowLayout will handle dynamic wrapping
-        for prompt_data in prompts_to_display:
-            button = QPushButton(prompt_data['title'])
-            # Pass a copy of prompt_data to avoid closure issues with the loop
-            button.clicked.connect(lambda checked, p=prompt_data: self.on_prompt_button_clicked(p))
-            self.prompt_buttons_layout.addWidget(button) # Changed from addWidget(button, row, col)
-
-         # Update status bar based on what was populated
-        if prompts_to_display == self.prompts: # If all prompts are displayed (no active filter)
-             self.statusBar().showMessage(f"{len(self.prompts)} prompts loaded.")
-        else: # If a filter was applied
-             self.statusBar().showMessage(f"{len(prompts_to_display)} prompts found.")
+    def populate_prompt_list(self): # Modified for QTableView
+        self.source_model.update_data(self.prompts) # Update the source model with current prompts
+        self.filter_prompt_list(self.search_input.text() if hasattr(self, 'search_input') else "") # Apply filter if any
+        # The status bar message is handled by filter_prompt_list now
 
 
     def save_prompt(self):
         title = self.title_input.text().strip()
         content = self.prompt_content_editor.toPlainText().strip()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if not title:
             QMessageBox.warning(self, "Error", "Prompt title cannot be empty.")
@@ -407,28 +415,41 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
         for i, p in enumerate(self.prompts):
             if p['title'] == title:
                 self.prompts[i]['content'] = content
+                self.prompts[i]['modified_at'] = now # Update modified date
                 message = f"Prompt '{title}' modified successfully!"
                 found = True
                 break
 
         if not found:
             # Add a new prompt
-            self.prompts.append({"title": title, "content": content})
+            self.prompts.append({"title": title, "content": content, "created_at": now, "modified_at": now}) # Add dates
             message = f"Prompt '{title}' saved successfully!"
 
         self.save_prompts()
         self.prompts = self.load_prompts() # Reload all prompts after saving
-        self.filter_prompt_buttons(self.search_input.text()) # Re-apply current filter
-        #self.populate_prompt_buttons() # Update buttons
+        self.populate_prompt_list() # Re-populate and apply filter
         self.statusBar().showMessage(message) # Use the status bar
         self.clear_input_fields()
         self.delete_button.setEnabled(False) # Disable delete button
 
     def delete_selected_prompt(self):
-        title_to_delete = self.title_input.text().strip()
-        if not title_to_delete:
-            QMessageBox.warning(self, "Error", "No prompt selected for deletion. Please select one by clicking its button.")
+        # Get selected rows from the proxy model
+        selected_indexes = self.prompt_table_view.selectionModel().selectedRows()
+        if not selected_indexes:
+            QMessageBox.warning(self, "Error", "No prompt selected for deletion. Please select one by clicking its title in the list.") # UPDATED text
             return
+
+        # Map proxy index to source index to get actual prompt data
+        # Assuming single selection for deletion, otherwise need to iterate
+        proxy_index = selected_indexes[0]
+        source_index = self.proxy_model.mapToSource(proxy_index)
+        prompt_to_delete = self.source_model.get_prompt_by_row(source_index.row())
+
+        if not prompt_to_delete:
+            QMessageBox.warning(self, "Error", "Could not retrieve selected prompt for deletion.")
+            return
+
+        title_to_delete = prompt_to_delete['title']
 
         reply = QMessageBox.question(self, "Confirm Deletion",
                                      f"Are you sure you want to delete the prompt '{title_to_delete}'?",
@@ -441,25 +462,39 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
             if len(self.prompts) < initial_len:
                 self.save_prompts()
                 self.prompts = self.load_prompts() # Reload all prompts after deletion
-                self.filter_prompt_buttons(self.search_input.text()) # Re-apply current filter
-                #self.populate_prompt_buttons()
+                self.populate_prompt_list() # Re-populate and apply filter
                 self.clear_input_fields()
                 self.delete_button.setEnabled(False)
                 self.statusBar().showMessage(f"Prompt '{title_to_delete}' deleted successfully!") # Use the status bar
             else:
                 QMessageBox.warning(self, "Error", f"Prompt '{title_to_delete}' not found.")
 
+    def on_prompt_table_selection_changed(self, selected, deselected): # NEW Slot for QTableView selection
+        
+        # Get the selected item from the proxy model
+        selected_indexes = selected.indexes()
+        
+        if selected_indexes:
+            proxy_index = selected_indexes[0] # Get the first selected row
+            # Map the proxy index back to the source model to get the original data
+            source_index = self.proxy_model.mapToSource(proxy_index)
+            prompt_data = self.source_model.get_prompt_by_row(source_index.row())
 
-    def on_prompt_button_clicked(self, prompt_data):
-        # Copy content to clipboard
-        clipboard = QApplication.clipboard()
-        clipboard.setText(prompt_data['content'])
-        self.statusBar().showMessage(f"Prompt '{prompt_data['title']}' copied to clipboard for editing.") # Use the status bar
+            if prompt_data:
+                clipboard = QApplication.clipboard()
+                clipboard.setText(prompt_data['content'])
+                self.statusBar().showMessage(f"Prompt '{prompt_data['title']}' copied to clipboard for editing.")
 
-        # Display content in the text area for modifications
-        self.title_input.setText(prompt_data['title'])
-        self.prompt_content_editor.setPlainText(prompt_data['content'])
-        self.delete_button.setEnabled(True) # Enable delete button when a prompt is selected
+                self.title_input.setText(prompt_data['title'])
+                self.prompt_content_editor.setPlainText(prompt_data['content'])
+                self.delete_button.setEnabled(True)
+            else:
+                self.clear_input_fields()
+        else:
+            self.clear_input_fields()
+
+    def on_prompt_button_clicked(self, prompt_data): # This method is now entirely unused
+        pass
 
     def clear_input_fields(self):
         self.title_input.clear()
@@ -470,6 +505,10 @@ class PromptManagerApp(QMainWindow): # Now inherits from QMainWindow
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    if not QSystemTrayIcon.isSystemTrayAvailable():
+        QMessageBox.critical(None, "System Tray Error", "I couldn't detect any system tray on this system.")
+        sys.exit(1)
+
     window = PromptManagerApp()
     window.show()
     sys.exit(app.exec())
